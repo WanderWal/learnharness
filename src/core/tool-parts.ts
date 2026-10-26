@@ -43,9 +43,21 @@ import { probeDoneInputSchema, type ProbeDoneInput } from "./contracts/probe.ts"
  *  exact input the boundary accepted — an invisible pending quiz and a
  *  learner lockout. Every display parse converts first, exactly like the
  *  boundary; Convert mutates, so the input is cloned before touching. */
-function boundaryParse<T>(schema: TSchema, input: unknown): T | undefined {
+function boundaryParse<T>(
+	schema: TSchema,
+	input: unknown,
+	repair: (value: unknown) => unknown = (value) => value,
+): T | undefined {
 	if (typeof input !== "object" || input === null) return undefined;
-	const converted = structuredClone(input);
+	// The boundary heal runs FIRST, on the raw record, for EVERY parse
+	// (Heroclix incident, 2026-10-26): every registry heals at the agent
+	// boundary (healToolRecord), so an ask_user_question whose `options`
+	// arrived as a JSON-encoded string was posed fine — but only the quiz
+	// parse healed on read, and the pending question rendered as the
+	// malformed fallback, locking the learner out. Healing before the math
+	// repair keeps the encoded JSON text intact for JSON.parse.
+	const healed = healEncodedArguments(input, schema as Parameters<typeof healEncodedArguments>[1]);
+	const converted = structuredClone(repair(healed));
 	Value.Convert(schema, converted);
 	if (!Value.Check(schema, converted)) return undefined;
 	return Value.Clean(schema, converted) as T;
@@ -95,13 +107,9 @@ export function parseQuizInput(input: unknown): QuizToolInput | undefined {
 	// dock renders/gates by it (normalizeQuizType at the read seam); old and
 	// probe records carry none. nodeId stays an unknown key Value.Clean
 	// strips, exactly as before.
-	// The display mirror of the boundary heal (whitehead, 2026-10-09): the
-	// record keeps RAW arguments, so the recorded `type: "\"predict\""`
-	// wobble must heal HERE too or a posed quiz renders invisible (the
-	// tool-parts law). healEncodedArguments is the same pure pass the
-	// boundary's withArgumentHeal runs.
-	const healedInput = healEncodedArguments(restoreMathEscapesDeep(input), quizDisplayInputSchema);
-	const cleaned = boundaryParse<QuizToolInput>(quizDisplayInputSchema, healedInput);
+	// The recorded `type: "\"predict\""` wobble (whitehead, 2026-10-09)
+	// heals inside boundaryParse, the same pass the boundary runs.
+	const cleaned = boundaryParse<QuizToolInput>(quizDisplayInputSchema, input, restoreMathEscapesDeep);
 	if (!cleaned) return undefined;
 	if (quizInputProblems(cleaned).length > 0) return undefined;
 	return cleaned;
@@ -114,7 +122,7 @@ export function parseQuizInput(input: unknown): QuizToolInput | undefined {
  * keying, so they parse to undefined exactly like the zod seam did).
  */
 export function parseAskInput(input: unknown): AskToolInput | undefined {
-	const cleaned = boundaryParse<AskToolInput>(askInputSchema, restoreMathEscapesDeep(input));
+	const cleaned = boundaryParse<AskToolInput>(askInputSchema, input, restoreMathEscapesDeep);
 	if (!cleaned) return undefined;
 	if (askOptionProblems(cleaned.options ?? []).length > 0) return undefined;
 	return cleaned;
@@ -127,7 +135,7 @@ export function parseAskInput(input: unknown): AskToolInput | undefined {
  *  variants share the same fields; the teacher's nodeId is an unknown
  *  key Value.Clean strips, same as the quiz seam. */
 export function parseExplainInput(input: unknown): ExplainToolInput | undefined {
-	const cleaned = boundaryParse<ExplainToolInput>(explainDisplayInputSchema, restoreMathEscapesDeep(input));
+	const cleaned = boundaryParse<ExplainToolInput>(explainDisplayInputSchema, input, restoreMathEscapesDeep);
 	if (!cleaned) return undefined;
 	if (explainInputProblems(cleaned).length > 0) return undefined;
 	return cleaned;

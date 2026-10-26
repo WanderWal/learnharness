@@ -8,8 +8,8 @@
  *
  *   - the agent boundary: pi's prepareArguments seam, BEFORE TypeBox
  *     validation (withArgumentHeal / healToolRecord);
- *   - the display parse: tool-parts' parseQuizInput, before
- *     boundaryParse — the persisted record keeps raw arguments, so the
+ *   - the display parse: every tool-parts parse, inside boundaryParse
+ *     before Convert — the persisted record keeps raw arguments, so the
  *     same wobble heals on read.
  *
  * Born of the GLM incident (owner, 2026-10-04): 19 consecutive rejected
